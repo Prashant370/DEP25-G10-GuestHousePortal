@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-
 import Checkbox from "@mui/material/Checkbox";
 import { useSelector, useDispatch } from "react-redux";
 import { privateRequest } from "../utils/useFetch";
