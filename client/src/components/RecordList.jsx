@@ -300,8 +300,44 @@ export default function RecordList({ status = "pending", desc }) {
       // Append basic form data
       formData.append('guestName', editFormData.guestName);
       formData.append('category', editFormData.category);
-      formData.append('arrivalDate', new Date(editFormData.arrivalDate).toISOString());
-      formData.append('departureDate', new Date(editFormData.departureDate).toISOString());
+      
+      // Fix date parsing by properly handling DD-MM-YYYY format
+      try {
+        // First try to safely parse the arrival date
+        let arrivalDate = editFormData.arrivalDate;
+        if (arrivalDate && typeof arrivalDate === 'string') {
+          // Check if it's in DD-MM-YYYY format
+          if (arrivalDate.match(/^\d{2}-\d{2}-\d{4}$/)) {
+            // Split by hyphen and rearrange to YYYY-MM-DD for proper ISO format
+            const [day, month, year] = arrivalDate.split('-');
+            arrivalDate = `${year}-${month}-${day}`;
+          }
+          // Now we should have YYYY-MM-DD or another ISO-compatible format
+          formData.append('arrivalDate', new Date(arrivalDate).toISOString());
+        } else {
+          formData.append('arrivalDate', arrivalDate);
+        }
+        
+        // Then try to safely parse the departure date
+        let departureDate = editFormData.departureDate;
+        if (departureDate && typeof departureDate === 'string') {
+          // Check if it's in DD-MM-YYYY format
+          if (departureDate.match(/^\d{2}-\d{2}-\d{4}$/)) {
+            // Split by hyphen and rearrange to YYYY-MM-DD for proper ISO format
+            const [day, month, year] = departureDate.split('-');
+            departureDate = `${year}-${month}-${day}`;
+          }
+          // Now we should have YYYY-MM-DD or another ISO-compatible format
+          formData.append('departureDate', new Date(departureDate).toISOString());
+        } else {
+          formData.append('departureDate', departureDate);
+        }
+      } catch (error) {
+        console.error('Error formatting dates:', error);
+        // If we encounter errors, just send the original strings
+        formData.append('arrivalDate', editFormData.arrivalDate);
+        formData.append('departureDate', editFormData.departureDate);
+      }
       
       // Append mobile number if exists
       if (editFormData.applicant?.mobile) {

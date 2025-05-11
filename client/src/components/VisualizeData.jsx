@@ -76,6 +76,7 @@ const exportFieldOptions = [
   { value: "paymentSource", label: "Payment Source" },
   { value: "paymentStatus", label: "Payment Status" },
   { value: "amount", label: "Amount" },
+  { value: "amountWithGST", label: "Amount with GST" },
   { value: "createdAt", label: "Created At" }
 ];
 

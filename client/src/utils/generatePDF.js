@@ -529,6 +529,14 @@ export const generateFilledPDF = async (formData) => {
 
 export const updateFilledPDF = async (formData) => {
   try {
+    console.log("Updating PDF with edited form data:", {
+      category: formData.category,
+      guestName: formData.guestName,
+      arrivalDate: formData.arrivalDate,
+      departureDate: formData.departureDate,
+      reviewers: formData.reviewers ? formData.reviewers.map(r => r.role) : 'None specified'
+    });
+    
     // Check for required form fields
     if (!formData || !formData.guestName || !formData.arrivalDate || !formData.departureDate) {
       console.error("Missing required form data for PDF generation");
@@ -536,12 +544,15 @@ export const updateFilledPDF = async (formData) => {
     }
 
     // Ensure applicant data exists
-    if (!formData.applicant || !formData.applicant.name) {
+    if (!formData.applicant) {
       console.error("Missing applicant data for PDF generation");
       return null;
     }
 
-    // Load existing PDF bytes with proper error handling
+    // When editing a reservation (especially when changing categories),
+    // completely regenerate the PDF from scratch to ensure all category markings
+    // and authority signatures are correct
+    console.log("Completely regenerating PDF from template with current form data");
     const filledPdfBytes = await generateFilledPDF(formData);
     
     // Create and return the blob

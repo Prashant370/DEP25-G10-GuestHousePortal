@@ -2,6 +2,7 @@ import express from 'express';
 import { google } from 'googleapis';
 import { checkAuth } from '../middlewares/tokens.js';
 import Reservation from '../models/Reservation.js';
+import { calculateGST } from '../controllers/reservation.js';
 import dotenv from 'dotenv';
 
 // Load environment variables
@@ -89,12 +90,16 @@ router.get('/all', checkAuth, async (req, res) => {
       'Payment Source',
       'Payment Status',
       'Amount',
+      'Amount with GST',
       'Created At'
     ];
     
     // Format data for Google Sheets
     const data = reservations.map(reservation => {
       const roomNumbers = reservation.bookings?.map(booking => booking.roomNumber).join(', ') || '';
+      const amount = reservation.payment?.amount || 0;
+      const gst = calculateGST(amount, reservation.category);
+      const amountWithGST = parseFloat(amount) + parseFloat(gst);
       
       return [
         reservation._id.toString(),
@@ -110,7 +115,8 @@ router.get('/all', checkAuth, async (req, res) => {
         reservation.category || '',
         reservation.payment?.source || '',
         reservation.payment?.status || '',
-        reservation.payment?.amount?.toString() || '',
+        amount.toString() || '',
+        amountWithGST.toFixed(2).toString() || '',
         new Date(reservation.createdAt).toLocaleString()
       ];
     });
@@ -262,6 +268,12 @@ router.post('/filtered', checkAuth, async (req, res) => {
       'paymentSource': { header: 'Payment Source', getValue: (r) => r.payment?.source || '' },
       'paymentStatus': { header: 'Payment Status', getValue: (r) => r.payment?.status || '' },
       'amount': { header: 'Amount', getValue: (r) => r.payment?.amount?.toString() || '' },
+      'amountWithGST': { header: 'Amount with GST', getValue: (r) => {
+        const amount = r.payment?.amount || 0;
+        const gst = calculateGST(amount, r.category);
+        const amountWithGST = parseFloat(amount) + parseFloat(gst);
+        return amountWithGST.toFixed(2).toString() || '';
+      }},
       'createdAt': { header: 'Created At', getValue: (r) => new Date(r.createdAt).toLocaleString() }
     };
     
@@ -269,9 +281,15 @@ router.post('/filtered', checkAuth, async (req, res) => {
     let selectedColumns = Object.keys(columnMap);
     if (fields && fields.length > 0) {
       // Only include fields that were requested
-      selectedColumns = fields.filter(field => columnMap[field]);
-      console.log('Filtered columns to:', selectedColumns);
+      selectedColumns = fields;
+      
+      // Ensure that if 'amount' is selected, 'amountWithGST' is also included
+      if (selectedColumns.includes('amount') && !selectedColumns.includes('amountWithGST')) {
+        selectedColumns.push('amountWithGST');
+      }
     }
+    
+    console.log('Filtered columns to:', selectedColumns);
     
     // Get headers for selected columns
     const headers = selectedColumns.map(field => columnMap[field].header);

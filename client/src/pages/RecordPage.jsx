@@ -85,7 +85,7 @@ export default function RecordPage() {
   useEffect(() => {
     const fetchRecord = async () => {
       try {
-        const response = await http.get(`/reservation/${id}`);
+        const response = await http.get(`/reservation/details/${id}`);
         console.log("I am response:");
         console.log(response.data.reservation);
         setStatus("Success");

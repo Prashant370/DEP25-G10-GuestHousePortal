@@ -1921,11 +1921,83 @@ export async function editReservation(req, res) {
       receiptId = req.files.receipt[0].id;
     }
 
-    // Calculate room cost
-    const ms = Number(
-      new Date(req.body.departureDate).getTime() - new Date(req.body.arrivalDate).getTime()
-    );
-    const days = Math.max(1, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+    // Parse dates properly with validation
+    let arrivalDateObj, departureDateObj;
+    let days = 1; // Default to 1 day if there's any issue with dates
+    
+    try {
+      // Handle arrival date with flexible format parsing
+      if (req.body.arrivalDate) {
+        // Get the arrival date from request
+        let arrivalDateStr = req.body.arrivalDate;
+        console.log('Original arrival date string:', arrivalDateStr);
+        
+        // Check if it's already an ISO string (from client)
+        if (typeof arrivalDateStr === 'string') {
+          // Try direct parsing first
+          arrivalDateObj = new Date(arrivalDateStr);
+          
+          // If that fails, try handling DD-MM-YYYY format
+          if (isNaN(arrivalDateObj.getTime()) && arrivalDateStr.match(/^\d{2}-\d{2}-\d{4}$/)) {
+            const [day, month, year] = arrivalDateStr.split('-');
+            arrivalDateStr = `${year}-${month}-${day}`;
+            arrivalDateObj = new Date(arrivalDateStr);
+            console.log('Reformatted arrival date:', arrivalDateStr);
+          }
+        }
+        
+        // If all parsing attempts fail, fall back to existing date
+        if (isNaN(arrivalDateObj.getTime())) {
+          console.error('All arrival date parsing failed for:', req.body.arrivalDate);
+          arrivalDateObj = new Date(existingReservation.arrivalDate);
+        }
+      } else {
+        // No arrival date provided, use existing
+        arrivalDateObj = new Date(existingReservation.arrivalDate);
+      }
+      
+      // Handle departure date with flexible format parsing
+      if (req.body.departureDate) {
+        // Get the departure date from request
+        let departureDateStr = req.body.departureDate;
+        console.log('Original departure date string:', departureDateStr);
+        
+        // Check if it's already an ISO string (from client)
+        if (typeof departureDateStr === 'string') {
+          // Try direct parsing first
+          departureDateObj = new Date(departureDateStr);
+          
+          // If that fails, try handling DD-MM-YYYY format
+          if (isNaN(departureDateObj.getTime()) && departureDateStr.match(/^\d{2}-\d{2}-\d{4}$/)) {
+            const [day, month, year] = departureDateStr.split('-');
+            departureDateStr = `${year}-${month}-${day}`;
+            departureDateObj = new Date(departureDateStr);
+            console.log('Reformatted departure date:', departureDateStr);
+          }
+        }
+        
+        // If all parsing attempts fail, fall back to existing date
+        if (isNaN(departureDateObj.getTime())) {
+          console.error('All departure date parsing failed for:', req.body.departureDate);
+          departureDateObj = new Date(existingReservation.departureDate);
+        }
+      } else {
+        // No departure date provided, use existing
+        departureDateObj = new Date(existingReservation.departureDate);
+      }
+      
+      // Ensure we have valid date objects before calculating
+      if (!isNaN(arrivalDateObj.getTime()) && !isNaN(departureDateObj.getTime())) {
+        // Calculate time difference for days
+        const ms = departureDateObj.getTime() - arrivalDateObj.getTime();
+        days = Math.max(1, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+        console.log('Calculated days between dates:', days);
+      } else {
+        console.error('Invalid date objects after parsing');
+      }
+    } catch (error) {
+      console.error('Date parsing error:', error);
+    }
     
     // Use calculateRoomCost helper function
     const roomType = req.body.roomType || existingReservation.roomType;
@@ -1956,11 +2028,16 @@ export async function editReservation(req, res) {
     // Prepare reviewers array for edited reservation
     let reviewersArray = [];
     
-    // Always add admin as a reviewer
+    // Always add admin as a reviewer with PENDING status
     reviewersArray.push({ role: "ADMIN", comments: "Form edited by user", status: "PENDING" });
     
-    // Add the user-selected reviewers from the form submission
+    // Check if category has changed
+    const categoryChanged = req.body.category && (req.body.category !== existingReservation.category);
+    console.log('Category changed:', categoryChanged, 'from', existingReservation.category, 'to', req.body.category);
+    
+    // If we have reviewers in the request and either the category changed or explicit reviewers were provided
     if (req.body.reviewers) {
+      console.log('Using explicitly provided reviewers from edit form:', req.body.reviewers);
       const reviewers = req.body.reviewers;
       const subroles = req.body.subroles || "";
       
@@ -1969,19 +2046,89 @@ export async function editReservation(req, res) {
         role:
           role +
           (subrolesArray[index] && subrolesArray[index] !== "Select" ? " " + subrolesArray[index] : ""),
-        comments: "Form edited by user",
+        comments: "Form edited by user - category" + (categoryChanged ? " changed from " + existingReservation.category + " to " + req.body.category : ""),
         status: "PENDING",
       })) : [];
       
       // Add all user-selected reviewers
       reviewersArray.push(...userSelectedReviewers);
-    } else {
-      // If no new reviewers specified, preserve the existing ones (except ADMIN which we already added)
+    } 
+    // If category changed but no explicit reviewers were provided, we need to determine the default reviewers
+    else if (categoryChanged) {
+      console.log('Category changed without explicit reviewers. Determining default reviewers for new category:', req.body.category);
+      
+      // Implement category-based reviewer assignment
+      // This logic mirrors what's in the client's Reservation_Form.jsx
+      switch(req.body.category) {
+        case "ES-B":
+        case "BR-B2":
+          // Chairman is the only reviewer for these categories
+          reviewersArray.push({
+            role: "CHAIRMAN",
+            comments: "Auto-assigned after category change from " + existingReservation.category + " to " + req.body.category,
+            status: "PENDING"
+          });
+          console.log('Added CHAIRMAN as reviewer for category', req.body.category);
+          break;
+          
+        case "ES-A":
+          // For ES-A, either Director or any Dean can approve
+          reviewersArray.push({
+            role: "DIRECTOR", 
+            comments: "Auto-assigned after category change from " + existingReservation.category + " to " + req.body.category,
+            status: "PENDING"
+          });
+          console.log('Added DIRECTOR as reviewer for category ES-A');
+          break;
+          
+        case "BR-A":
+          // For BR-A, default to Registrar (could be Director or Dean+Assoc Dean, but we'll use Registrar as default)
+          reviewersArray.push({
+            role: "REGISTRAR",
+            comments: "Auto-assigned after category change from " + existingReservation.category + " to " + req.body.category,
+            status: "PENDING"
+          });
+          console.log('Added REGISTRAR as reviewer for category BR-A');
+          break;
+          
+        case "BR-B1":
+          // For BR-B1, default to DEAN UNDER GRADUATE STUDIES and REGISTRAR
+          reviewersArray.push({
+            role: "DEAN UNDER GRADUATE STUDIES",
+            comments: "Auto-assigned after category change from " + existingReservation.category + " to " + req.body.category,
+            status: "PENDING"
+          });
+          reviewersArray.push({
+            role: "REGISTRAR",
+            comments: "Auto-assigned after category change from " + existingReservation.category + " to " + req.body.category,
+            status: "PENDING"
+          });
+          console.log('Added DEAN UNDER GRADUATE STUDIES and REGISTRAR as reviewers for category BR-B1');
+          break;
+          
+        default:
+          // If we don't have defaults for the category, keep existing reviewers but reset their status
+          const nonAdminReviewers = existingReservation.reviewers
+            .filter(reviewer => reviewer.role !== "ADMIN")
+            .map(reviewer => ({
+              role: reviewer.role,
+              comments: "Retained after category change but status reset to pending",
+              status: "PENDING"
+            }));
+          
+          reviewersArray.push(...nonAdminReviewers);
+          console.log('Retained existing reviewers for unknown category change');
+          break;
+      }
+    } 
+    // If no category change and no explicit reviewers, preserve existing reviewers but reset their status
+    else {
+      console.log('No category change, preserving existing reviewers but setting status to PENDING');
       const nonAdminReviewers = existingReservation.reviewers
         .filter(reviewer => reviewer.role !== "ADMIN")
         .map(reviewer => ({
           role: reviewer.role,
-          comments: "Form edited by user",
+          comments: "Form edited by user, status reset to pending",
           status: "PENDING"
         }));
       
@@ -1997,8 +2144,12 @@ export async function editReservation(req, res) {
       reviewers: reviewersArray,
       files: [...(existingReservation.files || []), ...newFiles],
       receipt: receiptId,  // Use the updated receipt ID
-      arrivalDate: new Date(arrivalDate + 'T' + (arrivalTime || "00:00")),
-      departureDate: new Date(departureDate + 'T' + (departureTime || "00:00")),
+      // Use our previously parsed and validated date objects to ensure they are valid Date objects
+      arrivalDate: arrivalDateObj,
+      departureDate: departureDateObj,
+      // Only set these if they were provided
+      ...(req.body.arrivalTime ? { arrivalTime: req.body.arrivalTime } : {}),
+      ...(req.body.departureTime ? { departureTime: req.body.departureTime } : {}),
       signature: signature,
       payment: {
         ...existingReservation.payment,
@@ -2117,6 +2268,17 @@ function calculateRoomCost(category, roomType, numberOfRooms, days) {
   const totalDays = Math.ceil(days);
   // Calculate total cost
   return baseCost * numberOfRooms * totalDays;
+}
+
+// Helper function to calculate GST (12%)
+export function calculateGST(amount, category) {
+  // Only calculate GST for categories that require payment (ES-B, BR-B1, BR-B2)
+  if (amount <= 0 || category === "ES-A" || category === "BR-A") {
+    return 0; // No GST for free categories
+  }
+  
+  // GST is 12% (6% CGST + 6% SGST)
+  return amount * 0.12;
 }
 
 // Update receipt file for an existing reservation
