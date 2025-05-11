@@ -202,7 +202,6 @@ export default function AdminRecordPage() {
       [name]: value
     });
   };
-
   // Handle admin form submission
   const handleAdminFormSubmit = async () => {
     try {
