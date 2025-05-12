@@ -11,7 +11,6 @@ const Workflow = ({ id, userRecord, reviewers, setReviewers }) => {
     confirmId: "",
   });
   console.log(userRecord);
-
   const { stepsCompleted } = userRecord;
   const user = useSelector((state) => state.user);
   const http = privateRequest(user.accessToken, user.refreshToken);
