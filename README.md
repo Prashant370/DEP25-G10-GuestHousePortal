@@ -31,8 +31,8 @@ Welcome to the Guest House Management Portal! This web application allows you to
 ## Installation
 To run the project locally, follow these steps:
 
-1. Clone this repository: `git clone https://github.com/Hardik329/DEP24-P04-GuestHouse`
-2. Navigate to the project directory: `cd DEP24-P04-GuestHouse`
+1. Clone this repository: `git clone https://github.com/Prashant370/Guest_House_Portal.git`
+2. Navigate to the project directory: `cd Guest_House_Portal`
 3. Install dependencies: `npm install`
 4. Run client and server: `npm start`
 
